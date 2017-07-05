@@ -73,15 +73,22 @@ Proc sql;
 	on				(a.ArrayCodeIndustryID=b.IndustryID) and (a.DataSeriesID=b.DataSeriesID) and (a.YearID=b.YearID);
 quit;
 
+/*REMOVE DATA FOR TESTING*/
+data work.AnnCmpDataSet;
+	set work.AnnCmpDataSet;
+	if ArrayCodeIndustryID="BN212210" then value=.;
+run;
+
 /* This code sums ULC data for each detailed industry*/
 proc sql;
 	Create table	work.ULCAggCalculatedVariables as
-	Select			IndustryID, DataSeriesID, "0000" as DataArrayID, YearID, CensusPeriodID, sum(Value) as Value
+	Select			IndustryID, DataSeriesID, "00" as DataArrayID, YearID, CensusPeriodID, 
+					case when nmiss(value)=. then sum(Value) else . end as Value
 	from			work.AnnCmpDataset
 	group by 		IndustryID, YearID, DataSeriesID, CensusPeriodID
 	order by		IndustryID, YearID;
 
-	Create table 	LPAll.LP_Append as
+	Create table 	work.LP_Append as
 	Select			IndustryID, DataSeriesID, DataArrayID, YearID, CensusPeriodID, Value 			from work.ULCAggCalculatedVariables union all
 	Select			IndustryID, DataSeriesID, DataArrayID, YearID, CensusPeriodID, Value 			from work.ULCSourceData
 	order by		IndustryID, DataSeriesID, DataArrayID, YearID;
@@ -95,3 +102,4 @@ quit;
 proc catalog c=work.sasmacr kill force;
 run;
 quit;
+
