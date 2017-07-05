@@ -36,15 +36,17 @@ run;
 Proc sql;
 	Create table	work.AssignAggMap as
 	Select			Distinct IndustryID, ArrayCodeIndustryID, DigitID, CensusPeriodID,
-					case	when DigitID="5-Digit" then "T11"
-							when DigitID="4-Digit" then "T12"
-							when DigitID="3-Digit" then "T13" 
-							when DigitID in ("2-Digit", "2-Sector") then "T14"
+					case	when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID="5-Digit" then "T11"
+							when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID="4-Digit" then "T12"
+							when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID="3-Digit" then "T13" 
+							when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID in ("2-Digit", "2-Sector") then "T14"
+							else "T37"
 					end as	OutDataSeriesID,
-					case	when DigitID="5-Digit" then "T21"
-							when DigitID="4-Digit" then "T22"
-							when DigitID="3-Digit" then "T23"
-							when DigitID in ("2-Digit", "2-Sector") then "T24" 
+					case	when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID="5-Digit" then "T21"
+							when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID="4-Digit" then "T22"
+							when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID="3-Digit" then "T23"
+							when Program not in ("Out-Rtl.sas", "Out-TQ.sas") and DigitID in ("2-Digit", "2-Sector") then "T24" 
+							else "T36"
 					end as	ValDataSeriesID
 	from			LPAll.AggregateConcordance
 	where			IndustrySeriesID="Output"
@@ -98,7 +100,6 @@ Proc sql;
 	on				(a.ArrayCodeIndustryID=b.IndustryID) and (a.ValDataSeriesID=b.DataSeriesID) and (a.YearID=b.YearID);
 quit;
 
-
 /*	Calculating logarithmic change in the sectoral output indexes */
 Proc sql;
 	Create table  	work.LogarithmicChange as 
@@ -111,11 +112,17 @@ Proc sql;
 					(a.YearNo-1=b.YearNo);
 quit;
 
+/*REMOVE DATA FOR TESTING*/
+data work.valdataset;
+	set work.valdataset;
+	if ArrayCodeIndustryID="BN212210" then value=.;
+run;
+
 /*	Calculating annual product shares of sectoral production */
 Proc sql;
 	Create table  	work.AnnualShares as 
     Select          a.IndustryID, a.CensusPeriodID, a.DataseriesID, a.ArrayCodeIndustryID, a.YearID, a.YearNo,
-					a.value/sum(a.value) as value
+					case when nmiss(value)=0 then a.value/sum(a.value) else . end as value
     from 	     	work.ValDataSet a 
 	group by		a.IndustryID, a.CensusPeriodID, a.YearID, a.YearNo;
 quit;
@@ -148,7 +155,8 @@ quit;
 Proc sql;
 	Create table 	work.AnnOut as
 	Select 			a.IndustryID, a.CensusPeriodID, "T37" as DataSeriesID, a.YearID, a.YearNo,
-					case 	when a.YearNo=1 then 100
+					case 	when b.Value=. then .
+							when a.YearNo=1 then 100
 							when a.YearNo=2 then b.value*100
 							when a.YearNo=3 then b.value*c.value*100
 							when a.YearNo=4 then b.value*c.value*d.value*100
@@ -171,15 +179,16 @@ quit;
 /* Calculating AnnVP (T36) */
 Proc sql;
 	Create table  	work.AnnVP as 
-    Select          IndustryID, CensusPeriodID, "T36" as DataseriesID, YearID, sum(a.value) as value
+    Select          IndustryID, CensusPeriodID, "T36" as DataseriesID, YearID, 
+					case when nmiss(value)=0 then sum(a.value) else . end as value
     from 	     	work.ValDataSet a 
 	group by		a.IndustryID, a.CensusPeriodID, a.YearID, a.YearNo;
 quit;
 
 Proc sql;
 	Create table 	work.OutAggCalculatedVariables as
-	Select 			IndustryID, DataSeriesID, "0000" as DataArrayID, YearID, CensusPeriodID, Value 	from work.AnnOut union all
-	Select			IndustryID, DataSeriesID, "0000" as DataArrayID, YearID, CensusPeriodiD, Value 	from work.AnnVP;
+	Select 			IndustryID, DataSeriesID, "00" as DataArrayID, YearID, CensusPeriodID, Value 	from work.AnnOut union all
+	Select			IndustryID, DataSeriesID, "00" as DataArrayID, YearID, CensusPeriodiD, Value 	from work.AnnVP;
 
 	Create table 	LPAll.LP_Append as
 	Select			IndustryID, DataSeriesID, DataArrayID, YearID, CensusPeriodID, Value 			from work.OutAggCalculatedVariables union all
